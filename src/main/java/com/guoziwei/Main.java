@@ -2,68 +2,94 @@ package com.guoziwei;
 
 import com.guoziwei.http.HttpManager;
 import com.guoziwei.model.Movie;
+import com.guoziwei.model.Person;
 import com.guoziwei.model.Subject;
 import io.reactivex.Observable;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.poi.hssf.usermodel.*;
 import org.apache.poi.ss.usermodel.HorizontalAlignment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 
 /**
  * Created by dell on 2017/8/9.
  */
 public class Main {
-    public static Logger logger = LoggerFactory.getLogger(Main.class);
 
-    private static int start = 0;
+    public static Logger logger = LoggerFactory.getLogger(Main.class);
 
     public static void main(String[] args) {
 
+        saveTop250();
+        saveInTheaters();
+    }
+
+    private static void saveTop250() {
         List<Observable<Subject>> observables = new ArrayList<>();
-        for (int i = 0; i < 10; i++) {
+        // 一共250条
+        for (int i = 0; i < 5; i++) {
             observables.add(HttpManager.getService().getTop250(i * 50));
         }
         Observable.zip(observables, subjects -> {
-            List<Movie> list = new ArrayList<>(500);
+            List<Movie> list = new ArrayList<>(250);
             for (Object o : subjects) {
                 Subject s = (Subject) o;
                 list.addAll(s.getSubjects());
             }
             list.sort((o1, o2) -> o2.getRating().getAverage() - o1.getRating().getAverage() > 0 ? 1 : -1);
-            saveToExcel(list);
             return list;
-        }).subscribe(s -> {
-            logger.debug("{}", s);
+        }).subscribe(list -> {
+            saveToExcel("top250", list);
         }, throwable -> {
-            logger.error("getInTheaters", throwable);
+            logger.error("getTop250", throwable);
         });
-
-      /*  HttpManager.getService().getInTheaters(start)
-                .map(subject -> {
-                    List<Movie> subjects = subject.getSubjects();
-                    saveToExcel(subjects);
-                    return subject;
-                })
-                .subscribe(s -> {
-                    logger.debug("{}", s);
-                }, throwable -> {
-                    logger.error("getInTheaters", throwable);
-                });*/
-
-        System.out.println("Press Any Key To Continue...");
-        new java.util.Scanner(System.in).nextLine();
     }
 
-    private static void saveToExcel(List<Movie> movies) throws Exception {
+    private static void saveInTheaters() {
+        List<Observable<Subject>> observables = new ArrayList<>();
+        // 100条左右
+        for (int i = 0; i < 3; i++) {
+            observables.add(HttpManager.getService().getInTheaters(i * 50));
+        }
+        Observable.zip(observables, subjects -> {
+            List<Movie> list = new ArrayList<>(100);
+            for (Object o : subjects) {
+                Subject s = (Subject) o;
+                list.addAll(s.getSubjects());
+            }
+//            list.sort((o1, o2) -> o2.getRating().getAverage() - o1.getRating().getAverage() > 0 ? 1 : -1);
+            return list;
+        })
+                .flatMap(Observable::fromIterable)
+                .filter(movie -> {
+                    Calendar calendar = Calendar.getInstance();
+                    int year = calendar.get(Calendar.YEAR);
+                    // 获取到今年和明年的正在热映
+                    return StringUtils.equalsAny(movie.getYear(), year + "", year + 1 + "");
+                })
+                .sorted((o1, o2) -> o2.getRating().getAverage() - o1.getRating().getAverage() > 0 ? 1 : -1)
+                .toList()
+                .subscribe(list -> {
+                    saveToExcel("热映中", list);
+                }, throwable -> {
+                    logger.error("InTheaters", throwable);
+                });
+    }
+
+    private static void saveToExcel(String sheetName, List<Movie> movies) throws Exception {
+        FileInputStream in = new FileInputStream("movies.xls");
+        HSSFWorkbook workbook = new HSSFWorkbook(in);
         // 创建一个Excel文件
-        HSSFWorkbook workbook = new HSSFWorkbook();
+//        HSSFWorkbook workbook = new HSSFWorkbook();
         // 创建一个工作表
-        HSSFSheet sheet = workbook.createSheet("最近热映");
+        HSSFSheet sheet = workbook.createSheet(sheetName);
         // 添加表头行
         HSSFRow hssfRow = sheet.createRow(0);
         // 设置单元格格式居中
@@ -75,12 +101,39 @@ public class Main {
         headCell.setCellValue("id");
         headCell.setCellStyle(cellStyle);
 
+
         headCell = hssfRow.createCell(1);
         headCell.setCellValue("名称");
         headCell.setCellStyle(cellStyle);
 
+
         headCell = hssfRow.createCell(2);
         headCell.setCellValue("评分");
+        headCell.setCellStyle(cellStyle);
+
+        headCell = hssfRow.createCell(3);
+        headCell.setCellValue("年份");
+        headCell.setCellStyle(cellStyle);
+
+        headCell = hssfRow.createCell(4);
+        headCell.setCellValue("类别");
+        headCell.setCellStyle(cellStyle);
+
+        headCell = hssfRow.createCell(5);
+        headCell.setCellValue("主演");
+        headCell.setCellStyle(cellStyle);
+
+        headCell = hssfRow.createCell(6);
+        headCell.setCellValue("导演");
+        headCell.setCellStyle(cellStyle);
+
+
+        headCell = hssfRow.createCell(7);
+        headCell.setCellValue("url");
+        headCell.setCellStyle(cellStyle);
+
+        headCell = hssfRow.createCell(8);
+        headCell.setCellValue("图片");
         headCell.setCellStyle(cellStyle);
 
         // 添加数据内容
@@ -100,13 +153,53 @@ public class Main {
             cell = hssfRow.createCell(2);
             cell.setCellValue(movie.getRating().getAverage());
             cell.setCellStyle(cellStyle);
+
+            cell = hssfRow.createCell(3);
+            cell.setCellValue(movie.getYear());
+            cell.setCellStyle(cellStyle);
+
+            cell = hssfRow.createCell(4);
+            cell.setCellValue(listToString(movie.getGenres()));
+            cell.setCellStyle(cellStyle);
+
+            cell = hssfRow.createCell(5);
+            cell.setCellValue(getPersonName(movie.getCasts()));
+            cell.setCellStyle(cellStyle);
+
+            cell = hssfRow.createCell(6);
+            cell.setCellValue(getPersonName(movie.getDirectors()));
+            cell.setCellStyle(cellStyle);
+
+            cell = hssfRow.createCell(7);
+            cell.setCellValue(movie.getAlt());
+            cell.setCellStyle(cellStyle);
+
+            cell = hssfRow.createCell(8);
+            cell.setCellValue(movie.getImages().get("large"));
+            cell.setCellStyle(cellStyle);
         }
 
         // 保存Excel文件
         OutputStream outputStream = new FileOutputStream("movies.xls");
         workbook.write(outputStream);
         outputStream.close();
+        in.close();
+    }
+
+    private static String getPersonName(List<Person> list) {
+        StringBuilder sb = new StringBuilder();
+        for (Person p : list) {
+            sb.append(p.getName()).append(" ");
+        }
+        return sb.toString();
     }
 
 
+    private static String listToString(List<String> list) {
+        StringBuilder sb = new StringBuilder();
+        for (String s : list) {
+            sb.append(s).append(" ");
+        }
+        return sb.toString();
+    }
 }

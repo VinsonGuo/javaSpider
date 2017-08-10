@@ -1,6 +1,7 @@
 package com.guoziwei.model;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Created by dell on 2017/8/9.
@@ -32,6 +33,7 @@ public class Movie {
     private java.util.List<String> genres;
     private java.util.List<Person> casts;
     private java.util.List<Person> directors;
+    private Map<String,String> images;
 
     public Rating getRating() {
         return rating;
@@ -127,5 +129,13 @@ public class Movie {
                 ", casts=" + casts +
                 ", directors=" + directors +
                 '}';
+    }
+
+    public Map<String, String> getImages() {
+        return images;
+    }
+
+    public void setImages(Map<String, String> images) {
+        this.images = images;
     }
 }
